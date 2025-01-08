@@ -50,7 +50,7 @@ UART_HandleTypeDef huart2;
 DMA_HandleTypeDef handle_GPDMA1_Channel0;
 
 /* USER CODE BEGIN PV */
-void processBuffer(const unsigned char *RxData, int batteryNumber, char *voltage, char *current, char *batterypercentage, char *status, char *SoH);
+void processBuffer(const unsigned char *RxData, int setmode, char *voltage, char *current, char *batterypercentage, char *status, char *SoH);
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -71,9 +71,9 @@ unsigned char RxData1[128];
 unsigned char RxData2[128];
 uint8_t RxData3[128];
 int before;
-char voltage1[7], current1[8], batterypercentage1[6], status1[10], SoH1[7];
-char voltage2[7], current2[8], batterypercentage2[6], status2[10], SoH2[7];
-
+char voltage1[5], current1[5], batterypercentage1[5], status1[10], SoH1[5];
+char voltage2[5], current2[5], batterypercentage2[5], status2[10], SoH2[5];
+char temperature[5], activePowerSource[5];
 void __io_putchar(char ch) {
 	HAL_UART_Transmit(&huart1, (uint8_t *)&ch, 1, 10);
 }
@@ -175,14 +175,16 @@ int main(void)
 		  before = 1;
 	  }
 
-	  processBuffer(RxData1, 1, voltage1, current1, batterypercentage1, status1, SoH1);
-	  processBuffer(RxData2, 2, voltage2, current2, batterypercentage2, status2, SoH2);
+	  processBuffer(RxData1, 0, voltage1, current1, batterypercentage1, status1, SoH1);
+	  processBuffer(RxData2, 0, voltage2, current2, batterypercentage2, status2, SoH2);
+	  processBuffer(RxData3, 1, temperature, activePowerSource, NULL, NULL, NULL);
 
-	  printf("voltage1: %s | current1: %s | capacity1: %s | status1: %s | SoH1: %s", voltage1, current1, batterypercentage1, status1, SoH1);
-	  printf("voltage2: %s | current2: %s | capacity2: %s | status2: %s | SoH2: %s", voltage2, current2, batterypercentage2, status2, SoH2);
-
+	  printf("voltage1: %s V | current1: %sA | capacity1: %s%% | status1: %s | SoH1: %s%%\n", voltage1, current1, batterypercentage1, status1, SoH1);
+	  printf("voltage2: %s V | current2: %sA | capacity2: %s%% | status2: %s | SoH2: %s%%\n", voltage2, current2, batterypercentage2, status2, SoH2);
+	  printf("temperature: %s C | activePowerSource: %s\n", temperature, activePowerSource);
 	  memset(RxData1, 0, sizeof(RxData1));
 	  memset(RxData2, 0, sizeof(RxData2));
+	  memset(RxData3, 0, sizeof(RxData3));
 	  HAL_Delay(300);
   }
   /* USER CODE END 3 */
@@ -397,27 +399,42 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
     }
 }
 
-void processBuffer(const unsigned char *RxData, int batteryNumber, char *voltage, char *current, char *batterypercentage, char *status, char *SoH) {
+void processBuffer(const unsigned char *RxData, int setmode, char *voltage, char *current, char *batterypercentage, char *status, char *SoH) {
     if (RxData[0] != '\0') {
-        // Copy and null-terminate the strings
-        memcpy(voltage, RxData, 6);
-        voltage[6] = '\0';
+        if(setmode == 0){
+        	// Copy and null-terminate the strings
+        	memcpy(voltage, RxData, 4);
+        	voltage[4] = '\0';
 
-        memcpy(current, RxData + 7, 7);
-        current[7] = '\0';
+        	memcpy(current, RxData + 5, 5);
+        	current[5] = '\0';
 
-        memcpy(batterypercentage, RxData + 15, 5);
-        batterypercentage[5] = '\0';
+        	memcpy(batterypercentage, RxData + 11, 3);
+        	batterypercentage[3] = '\0';
 
-        memcpy(status, RxData + 21, 1);
-        status[1] = '\0';
-        if (strcmp(status, "1") == 0) {
-            strcpy(status, "charge");
-        } else {
-            strcpy(status, "discharge");
+        	memcpy(status, RxData + 16, 1);
+        	status[1] = '\0';
+        	if (strcmp(status, "1") == 0) {
+        		strcpy(status, "charge");
+        	} else {
+        		strcpy(status, "discharge");
+        	}
+
+        	memcpy(SoH, RxData + 18, 3);
+        	SoH[4] = '\0';
         }
-        memcpy(SoH, RxData + 23, 6);
-        SoH[6] = '\0';
+        else if(setmode == 1){
+        	memcpy(voltage, RxData, 4);
+        	voltage[4] = '\0';
+
+        	memcpy(current, RxData + 5, 1);
+        	current[1] = '\0';
+        	if (strcmp(current, "1") == 0) {
+        		strcpy(current, "Baterai 1");
+        	} else {
+        		strcpy(current, "Baterai 2");
+        	}
+        }
     }
 }
 
