@@ -50,7 +50,7 @@ UART_HandleTypeDef huart2;
 DMA_HandleTypeDef handle_GPDMA1_Channel0;
 
 /* USER CODE BEGIN PV */
-void processBuffer(const unsigned char *RxData, int setmode, char *voltage, char *current, char *batterypercentage, char *status, char *SoH);
+void processBuffer();
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -67,13 +67,11 @@ static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN 0 */
 uint8_t request;
 uint8_t rxData;
-unsigned char RxData1[128];
-unsigned char RxData2[128];
-uint8_t RxData3[128];
+unsigned char RxData[128];
 int before;
-char voltage1[5], current1[5], batterypercentage1[5], status1[10], SoH1[5];
-char voltage2[5], current2[5], batterypercentage2[5], status2[10], SoH2[5];
-char temperature[5], activePowerSource[5];
+char voltage1[5], current1[5], SoC1[5], status1[10], SoH1[5];
+char voltage2[5], current2[5], SoC2[5], status2[10], SoH2[5];
+char temperature[5], activePowerSource[10];
 void __io_putchar(char ch) {
 	HAL_UART_Transmit(&huart1, (uint8_t *)&ch, 1, 10);
 }
@@ -154,38 +152,19 @@ int main(void)
 	  }
 	  rxData = 0;
 
-
 	  HAL_HalfDuplex_EnableTransmitter(&huart2);
-	  HAL_UART_Transmit(&huart2, &request, 1, 1000);
-	  HAL_Delay(10);
+	  HAL_UART_Transmit(&huart2, &request, 1, 80);
+	  HAL_Delay(5);
 	  HAL_HalfDuplex_EnableReceiver(&huart2);
-	  if (before == 1){
-		  request = 0x55;
-		  HAL_UART_Receive(&huart2, RxData3, sizeof(RxData3), 1000);
-		  before = 2;
-	  }
-	  else if(before == 2){
-		  request = 0x66;
-		  HAL_UART_Receive(&huart2, RxData1, sizeof(RxData1), 1000);
-		  before = 0;
-	  }
-	  else if(before == 0){
-		  request = 0x77;
-		  HAL_UART_Receive(&huart2, RxData2, sizeof(RxData2), 1000);
-		  before = 1;
-	  }
+	  request = 0x55;
+	  HAL_UART_Receive(&huart2, RxData, sizeof(RxData), 80);
 
-	  processBuffer(RxData1, 0, voltage1, current1, batterypercentage1, status1, SoH1);
-	  processBuffer(RxData2, 0, voltage2, current2, batterypercentage2, status2, SoH2);
-	  processBuffer(RxData3, 1, temperature, activePowerSource, NULL, NULL, NULL);
-
-	  printf("voltage1: %s V | current1: %sA | capacity1: %s%% | status1: %s | SoH1: %s%%\n", voltage1, current1, batterypercentage1, status1, SoH1);
-	  printf("voltage2: %s V | current2: %sA | capacity2: %s%% | status2: %s | SoH2: %s%%\n", voltage2, current2, batterypercentage2, status2, SoH2);
+	  processBuffer();
+	  printf("voltage1: %s V | current1: %sA | capacity1: %s%% | status1: %s | SoH1: %s%%\n", voltage1, current1, SoC1, status1, SoH1);
+	  printf("voltage2: %s V | current2: %sA | capacity2: %s%% | status2: %s | SoH2: %s%%\n", voltage2, current2, SoC2, status2, SoH2);
 	  printf("temperature: %s C | activePowerSource: %s\n", temperature, activePowerSource);
-	  memset(RxData1, 0, sizeof(RxData1));
-	  memset(RxData2, 0, sizeof(RxData2));
-	  memset(RxData3, 0, sizeof(RxData3));
-	  HAL_Delay(300);
+	  memset(RxData, 0, sizeof(RxData));
+	  HAL_Delay(1000);
   }
   /* USER CODE END 3 */
 }
@@ -399,43 +378,62 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
     }
 }
 
-void processBuffer(const unsigned char *RxData, int setmode, char *voltage, char *current, char *batterypercentage, char *status, char *SoH) {
-    if (RxData[0] != '\0') {
-        if(setmode == 0){
-        	// Copy and null-terminate the strings
-        	memcpy(voltage, RxData, 4);
-        	voltage[4] = '\0';
+void processBuffer(){
+	if(RxData[0] != '\0'){
+		//Process of demultiplexing battery data 1
+		memcpy(voltage1, RxData, 4);
+		voltage1[4] = '\0';
 
-        	memcpy(current, RxData + 5, 5);
-        	current[5] = '\0';
+		memcpy(current1, RxData + 5, 5);
+		current1[5] = '\0';
 
-        	memcpy(batterypercentage, RxData + 11, 3);
-        	batterypercentage[3] = '\0';
+		memcpy(SoC1, RxData + 11, 3);
+		SoC1[3] = '\0';
 
-        	memcpy(status, RxData + 16, 1);
-        	status[1] = '\0';
-        	if (strcmp(status, "1") == 0) {
-        		strcpy(status, "charge");
-        	} else {
-        		strcpy(status, "discharge");
-        	}
+		memcpy(status1, RxData + 16, 1);
+		status1[1] = '\0';
+		if (strcmp(status1, "1") == 0) {
+			strcpy(status1, "charge");
+		} else {
+			strcpy(status1, "discharge");
+		}
 
-        	memcpy(SoH, RxData + 18, 3);
-        	SoH[4] = '\0';
-        }
-        else if(setmode == 1){
-        	memcpy(voltage, RxData, 4);
-        	voltage[4] = '\0';
+		memcpy(SoH1, RxData + 18, 3);
+		SoH1[4] = '\0';
 
-        	memcpy(current, RxData + 5, 1);
-        	current[1] = '\0';
-        	if (strcmp(current, "1") == 0) {
-        		strcpy(current, "Baterai 1");
-        	} else {
-        		strcpy(current, "Baterai 2");
-        	}
-        }
-    }
+		//Process of demultiplexing battery data 2
+		memcpy(voltage2, RxData + 22, 4);
+		voltage2[4] = '\0';
+
+		memcpy(current2, RxData + 27, 5);
+		current2[5] = '\0';
+
+		memcpy(SoC2, RxData + 33, 3);
+		SoC2[3] = '\0';
+
+		memcpy(status2, RxData + 37, 1);
+		status2[1] = '\0';
+		if (strcmp(status2, "1") == 0) {
+			strcpy(status2, "charge");
+		} else {
+			strcpy(status2, "discharge");
+		}
+
+		memcpy(SoH2, RxData + 40, 3);
+		SoH2[4] = '\0';
+
+		//Process of demultiplexing temperature and activepowersource
+		memcpy(temperature, RxData + 44, 4);
+		temperature[4] = '\0';
+
+		memcpy(activePowerSource, RxData + 49, 5);
+		activePowerSource[5] = '\0';
+		if (strcmp(activePowerSource, "1") == 0) {
+			strcpy(activePowerSource, "Baterai 1");
+		} else {
+			strcpy(activePowerSource, "Baterai 2");
+		}
+	}
 }
 
 /* USER CODE END 4 */
