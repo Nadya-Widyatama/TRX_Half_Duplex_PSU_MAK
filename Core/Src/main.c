@@ -45,12 +45,15 @@
 
 /* Private variables ---------------------------------------------------------*/
 
+TIM_HandleTypeDef htim1;
+
 UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
 DMA_HandleTypeDef handle_GPDMA1_Channel0;
 
 /* USER CODE BEGIN PV */
 void processBuffer();
+void Beep_Beep(uint8_t cycle, uint16_t delay1, uint16_t delay2);
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -59,6 +62,7 @@ static void MX_GPIO_Init(void);
 static void MX_GPDMA1_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_USART2_UART_Init(void);
+static void MX_TIM1_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -67,11 +71,11 @@ static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN 0 */
 uint8_t request;
 uint8_t rxData;
-unsigned char RxData[128];
+unsigned char RxData[64];
 int before;
 char voltage1[5], current1[5], SoC1[5], status1[10], SoH1[5];
 char voltage2[5], current2[5], SoC2[5], status2[10], SoH2[5];
-char temperature[5], activePowerSource[10];
+char temperature[5], activePowerSource[10], emergencybattery[10];
 void __io_putchar(char ch) {
 	HAL_UART_Transmit(&huart1, (uint8_t *)&ch, 1, 10);
 }
@@ -110,9 +114,10 @@ int main(void)
   MX_GPDMA1_Init();
   MX_USART1_UART_Init();
   MX_USART2_UART_Init();
+  MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
   HAL_HalfDuplex_EnableReceiver(&huart2);
-
+  Beep_Beep(3,50,50);
 //  HAL_UARTEx_ReceiveToIdle_IT(&huart2, (uint8_t* )RxData, 30);
   /* USER CODE END 2 */
 
@@ -153,16 +158,16 @@ int main(void)
 	  rxData = 0;
 
 	  HAL_HalfDuplex_EnableTransmitter(&huart2);
-	  HAL_UART_Transmit(&huart2, &request, 1, 80);
+	  HAL_UART_Transmit(&huart2, &request, 1, 200);
 	  HAL_Delay(5);
 	  HAL_HalfDuplex_EnableReceiver(&huart2);
-	  request = 0x55;
-	  HAL_UART_Receive(&huart2, RxData, sizeof(RxData), 80);
+	  request = 0x6A;
+	  HAL_UART_Receive(&huart2, RxData, sizeof(RxData), 200);
 
 	  processBuffer();
 	  printf("voltage1: %s V | current1: %sA | capacity1: %s%% | status1: %s | SoH1: %s%%\n", voltage1, current1, SoC1, status1, SoH1);
 	  printf("voltage2: %s V | current2: %sA | capacity2: %s%% | status2: %s | SoH2: %s%%\n", voltage2, current2, SoC2, status2, SoH2);
-	  printf("temperature: %s C | activePowerSource: %s\n", temperature, activePowerSource);
+	  printf("temperature: %s C | activePowerSource: %s | emergencybattery: %s\n", temperature, activePowerSource, emergencybattery);
 	  memset(RxData, 0, sizeof(RxData));
 	  HAL_Delay(1000);
   }
@@ -243,6 +248,82 @@ static void MX_GPDMA1_Init(void)
   /* USER CODE BEGIN GPDMA1_Init 2 */
 
   /* USER CODE END GPDMA1_Init 2 */
+
+}
+
+/**
+  * @brief TIM1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM1_Init(void)
+{
+
+  /* USER CODE BEGIN TIM1_Init 0 */
+
+  /* USER CODE END TIM1_Init 0 */
+
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+  TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig = {0};
+
+  /* USER CODE BEGIN TIM1_Init 1 */
+
+  /* USER CODE END TIM1_Init 1 */
+  htim1.Instance = TIM1;
+  htim1.Init.Prescaler = 1;
+  htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim1.Init.Period = 8191;
+  htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim1.Init.RepetitionCounter = 0;
+  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_PWM_Init(&htim1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterOutputTrigger2 = TIM_TRGO2_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 0;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
+  sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
+  if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sBreakDeadTimeConfig.OffStateRunMode = TIM_OSSR_DISABLE;
+  sBreakDeadTimeConfig.OffStateIDLEMode = TIM_OSSI_DISABLE;
+  sBreakDeadTimeConfig.LockLevel = TIM_LOCKLEVEL_OFF;
+  sBreakDeadTimeConfig.DeadTime = 0;
+  sBreakDeadTimeConfig.BreakState = TIM_BREAK_DISABLE;
+  sBreakDeadTimeConfig.BreakPolarity = TIM_BREAKPOLARITY_HIGH;
+  sBreakDeadTimeConfig.BreakFilter = 0;
+  sBreakDeadTimeConfig.BreakAFMode = TIM_BREAK_AFMODE_INPUT;
+  sBreakDeadTimeConfig.Break2State = TIM_BREAK2_DISABLE;
+  sBreakDeadTimeConfig.Break2Polarity = TIM_BREAK2POLARITY_HIGH;
+  sBreakDeadTimeConfig.Break2Filter = 0;
+  sBreakDeadTimeConfig.Break2AFMode = TIM_BREAK_AFMODE_INPUT;
+  sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
+  if (HAL_TIMEx_ConfigBreakDeadTime(&htim1, &sBreakDeadTimeConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM1_Init 2 */
+
+  /* USER CODE END TIM1_Init 2 */
+  HAL_TIM_MspPostInit(&htim1);
 
 }
 
@@ -349,23 +430,12 @@ static void MX_USART2_UART_Init(void)
   */
 static void MX_GPIO_Init(void)
 {
-  GPIO_InitTypeDef GPIO_InitStruct = {0};
 /* USER CODE BEGIN MX_GPIO_Init_1 */
 /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOC_CLK_ENABLE();
-
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin : PC7 */
-  GPIO_InitStruct.Pin = GPIO_PIN_7;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
@@ -411,7 +481,7 @@ void processBuffer(){
 		memcpy(SoC2, RxData + 33, 3);
 		SoC2[3] = '\0';
 
-		memcpy(status2, RxData + 37, 1);
+		memcpy(status2, RxData + 38, 1);
 		status2[1] = '\0';
 		if (strcmp(status2, "1") == 0) {
 			strcpy(status2, "charge");
@@ -426,16 +496,42 @@ void processBuffer(){
 		memcpy(temperature, RxData + 44, 4);
 		temperature[4] = '\0';
 
-		memcpy(activePowerSource, RxData + 49, 5);
-		activePowerSource[5] = '\0';
+		memcpy(activePowerSource, RxData + 49, 1);
+		activePowerSource[1] = '\0';
 		if (strcmp(activePowerSource, "1") == 0) {
 			strcpy(activePowerSource, "Baterai 1");
 		} else {
 			strcpy(activePowerSource, "Baterai 2");
 		}
+
+		memcpy(emergencybattery, RxData + 51, 1);
+		emergencybattery[1] = '\0';
+		if (strcmp(emergencybattery, "1") == 0) {
+			strcpy(emergencybattery, "Baterai 1");
+		}
+		else if (strcmp(emergencybattery, "2") == 0){
+			strcpy(emergencybattery, "Baterai 2");
+		}
+		else{
+			strcpy(emergencybattery, "Normal");
+		}
 	}
 }
 
+void Beep_Beep(uint8_t cycle, uint16_t delay1, uint16_t delay2) {
+	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+	for (int i = 0; i < cycle; i++) {
+		HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 3000);
+		HAL_Delay(delay1);
+		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0);
+		HAL_Delay(50);
+		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 1000);
+		HAL_Delay(delay2);
+		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0);
+		HAL_Delay(50);
+	}
+}
 /* USER CODE END 4 */
 
 /**
